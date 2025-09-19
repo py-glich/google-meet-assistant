@@ -1,91 +1,88 @@
 import streamlit as st
 import time
+import openai
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from threading import Thread
 
-# Try importing OpenAI
-try:
-    import openai
-except Exception:
-    st.error("❌ Missing `openai` package. Make sure it's in requirements.txt")
-    raise
+# -------------------------------
+# Streamlit UI
+# -------------------------------
+st.set_page_config(page_title="Google Meet Assistant", layout="wide")
 
-# ----------------------------
-# OpenAI / OpenRouter setup
-# ----------------------------
-# Load API key & base URL from Streamlit Secrets
-OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY")
-OPENAI_BASE_URL = st.secrets.get("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
+st.title("🌌 Google Meet Assistant")
+meet_code = st.text_input("Enter Google Meet Code (e.g., txe-ditf-qgs):")
 
-if not OPENAI_API_KEY:
-    st.warning("⚠️ OPENAI_API_KEY is not set. Add it in Streamlit Cloud Secrets to enable AI calls.")
+# Panels
+subtitles_box = st.empty()
+response_box = st.empty()
+status_bar = st.empty()
 
-# Create client only if API key is set
-client = None
-if OPENAI_API_KEY:
-    client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+# -------------------------------
+# OpenAI Setup (OpenRouter)
+# -------------------------------
+client = openai.OpenAI(
+    api_key="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",  # Replace with your key
+    base_url="https://openrouter.ai/api/v1"
+)
 
-# ----------------------------
-# Helper function
-# ----------------------------
-def ask_ai(question: str) -> str:
-    """Send a question to OpenAI / OpenRouter and return the response"""
-    if not client:
-        return "🔒 API key not set (add OPENAI_API_KEY in Secrets)."
+def ask_ai(question):
     try:
-        resp = client.chat.completions.create(
+        response = client.chat.completions.create(
             model="google/gemini-2.0-flash-lite-001",
             messages=[{"role": "user", "content": question}]
         )
-        if resp and hasattr(resp, "choices") and resp.choices:
-            return resp.choices[0].message.content.strip()
-        return "⚠️ No valid response from AI"
+        if response and hasattr(response, 'choices') and response.choices:
+            return response.choices[0].message.content.strip()
+        return "⚠ No valid response from AI"
     except Exception as e:
-        return f"🚨 API Error: {e}"
+        return f"🚨 API Error: {str(e)}"
 
-# ----------------------------
-# Streamlit UI
-# ----------------------------
-st.set_page_config(page_title="Google Meet Assistant", layout="centered")
-st.title("🎙 Google Meet Assistant (Streamlit Demo)")
+# -------------------------------
+# Selenium Setup
+# -------------------------------
+def start_meeting(meet_code):
+    try:
+        service = Service()
+        options = webdriver.ChromeOptions()
+        options.add_argument("--use-fake-ui-for-media-stream")
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("--mute-audio")
+        driver = webdriver.Chrome(service=service, options=options)
 
-# Session state
-if "subs" not in st.session_state:
-    st.session_state.subs = []
-if "resps" not in st.session_state:
-    st.session_state.resps = []
+        driver.get("https://meet.google.com/")
+        status_bar.info("Please log in manually in the browser...")
+        time.sleep(5)
 
-st.markdown("**Manual mode:** Paste or type a subtitle/question and press *Send to AI*.")
+        meeting_link = f"https://meet.google.com/{meet_code}"
+        driver.get(meeting_link)
+        time.sleep(10)
+        status_bar.success("✅ Google Meet opened successfully!")
 
-col1, col2 = st.columns([3, 1])
-with col1:
-    subtitle = st.text_area("Subtitle / Question", placeholder="Paste a Meet subtitle here", height=120)
-with col2:
-    if st.button("Send to AI"):
-        text = subtitle.strip()
-        if not text:
-            st.warning("⚠️ Type or paste a subtitle first.")
-        else:
-            st.session_state.subs.append(text)
-            with st.spinner("🤔 Asking AI..."):
-                ans = ask_ai(text)
-            st.session_state.resps.append(ans)
-            st.success("✅ Response added to history")
+        # Background loop for subtitles
+        while True:
+            subtitles = driver.find_elements(By.CLASS_NAME, "iOzk7")
+            if subtitles:
+                last_subtitle = subtitles[-1].text.strip()
+                subtitles_box.write("**📝 Subtitles:**\n" + last_subtitle)
 
-# Demo button
-st.markdown("---")
-st.markdown("**Quick demo:** Add a sample subtitle (no Meet needed).")
-if st.button("Add sample subtitle"):
-    demo_text = f"Sample subtitle at {time.strftime('%H:%M:%S')}"
-    st.session_state.subs.append(demo_text)
-    st.session_state.resps.append(ask_ai(demo_text))
+                # Get AI response
+                answer = ask_ai(last_subtitle)
+                response_box.write("**🤖 AI Response:**\n" + answer)
 
-# History
-st.markdown("### 📜 History (latest first)")
-for s, r in zip(reversed(st.session_state.subs), reversed(st.session_state.resps)):
-    st.markdown(f"**Subtitle:** {s}")
-    st.markdown(f"**AI:** {r}")
-    st.markdown("---")
+            time.sleep(2)
 
-st.caption("ℹ️ Note: Selenium live capture won’t run on Streamlit Cloud. Use manual input or demo mode.")
+    except Exception as e:
+        status_bar.error(f"🛑 Error: {e}")
+
+# -------------------------------
+# Start Button
+# -------------------------------
+if st.button("🚀 Start Assistant") and meet_code:
+    Thread(target=start_meeting, args=(meet_code,), daemon=True).start()
+
+
 
 
 

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🌌 Google Meet Assistant</title>
+  <style>
+    body { background:#0f0f1f; color:#00fff0; font-family:Arial, sans-serif; }
+    .container { display:flex; gap:20px; padding:20px; }
+    .panel { flex:1; background:#1c1c2e; padding:15px; border-radius:10px; }
+    h2 { color:#00ff9f; }
+    pre { white-space:pre-wrap; color:#fff; }
+    button { background:#1f1f40; color:#00fff0; border:none; padding:10px 20px; border-radius:8px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h1>🌌 Google Meet Assistant Dashboard</h1>
+  <div>
+    <input type="text" id="meet_code" placeholder="Enter Meet Code">
+    <button onclick="startBot()">Start Assistant</button>
+  </div>
+
+  <div class="container">
+    <div class="panel">
+      <h2>📝 Subtitles</h2>
+      <pre id="subtitles"></pre>
+    </div>
+    <div class="panel">
+      <h2>🤖 AI Responses</h2>
+      <pre id="responses"></pre>
+    </div>
+  </div>
+
+  <script>
+    async function startBot() {
+      const code = document.getElementById("meet_code").value;
+      await fetch("/start", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({meet_code: code})
+      });
+    }
+
+    async function fetchData() {
+      const res = await fetch("/data");
+      const data = await res.json();
+      document.getElementById("subtitles").textContent = data.subtitles.join("\n");
+      document.getElementById("responses").textContent = data.responses.join("\n\n");
+    }
+
+    setInterval(fetchData, 3000);
+  </script>
+</body>
+</html>

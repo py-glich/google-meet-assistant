@@ -23,7 +23,7 @@ status_bar = st.empty()
 # OpenAI Setup (OpenRouter)
 # -------------------------------
 client = openai.OpenAI(
-    api_key="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",  # Replace with your key
+    api_key="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",  # 🔑 Your key
     base_url="https://openrouter.ai/api/v1"
 )
 
@@ -44,32 +44,38 @@ def ask_ai(question):
 # -------------------------------
 def start_meeting(meet_code):
     try:
-        service = Service()
+        service = Service()  # requires chromedriver installed
         options = webdriver.ChromeOptions()
-        options.add_argument("--use-fake-ui-for-media-stream")
+        options.add_argument("--use-fake-ui-for-media-stream")  # auto allow mic/cam
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--mute-audio")
+
         driver = webdriver.Chrome(service=service, options=options)
 
+        # Open Google Meet login
         driver.get("https://meet.google.com/")
-        status_bar.info("Please log in manually in the browser...")
-        time.sleep(5)
+        status_bar.info("Please log in manually in the browser window...")
+        time.sleep(10)  # give time for login
 
+        # Join meeting
         meeting_link = f"https://meet.google.com/{meet_code}"
         driver.get(meeting_link)
-        time.sleep(10)
-        status_bar.success("✅ Google Meet opened successfully!")
+        time.sleep(15)  # wait for meeting to load
+        status_bar.success("✅ Google Meet opened and joined!")
 
-        # Background loop for subtitles
+        # Loop: grab subtitles + send to AI
+        last_seen = ""
         while True:
             subtitles = driver.find_elements(By.CLASS_NAME, "iOzk7")
             if subtitles:
-                last_subtitle = subtitles[-1].text.strip()
-                subtitles_box.write("**📝 Subtitles:**\n" + last_subtitle)
+                latest = subtitles[-1].text.strip()
+                if latest != last_seen:  # only process new lines
+                    last_seen = latest
+                    subtitles_box.write(f"**📝 Subtitles:**\n{latest}")
 
-                # Get AI response
-                answer = ask_ai(last_subtitle)
-                response_box.write("**🤖 AI Response:**\n" + answer)
+                    # Send to AI
+                    answer = ask_ai(latest)
+                    response_box.write(f"**🤖 AI Response:**\n{answer}")
 
             time.sleep(2)
 
@@ -81,6 +87,8 @@ def start_meeting(meet_code):
 # -------------------------------
 if st.button("🚀 Start Assistant") and meet_code:
     Thread(target=start_meeting, args=(meet_code,), daemon=True).start()
+
+
 
 
 

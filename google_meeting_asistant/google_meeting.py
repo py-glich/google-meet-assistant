@@ -1,109 +1,87 @@
 # app.py
+# app.py
+import streamlit as st
+import os
 import time
-import openai
-from flask import Flask, render_template, request, jsonify
-from threading import Thread
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
 
-# ------------------------------
-# 🔹 Flask Setup
-# ------------------------------
-app = Flask(__name__)
+# try to import openai (requirements.txt will ensure it's available on deploy)
+try:
+    import openai
+except Exception as e:
+    st.error("Missing `openai` package. Add it to requirements.txt and redeploy.")
+    raise
 
-subtitles_data = []
-responses_data = []
-meet_code = None
+# ----------------------------
+# OpenAI / OpenRouter setup
+# ----------------------------
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 
-# ------------------------------
-# 🔹 Selenium ChromeDriver
-# ------------------------------
-def start_meeting(meet_code):
-    global subtitles_data, responses_data
+if not OPENAI_API_KEY:
+    st.warning("OPENAI_API_KEY is not set. Add it in Streamlit Cloud Secrets to enable AI calls.")
+
+# create client (works for OpenRouter pattern used earlier)
+client = openai.OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+
+def ask_ai(question: str) -> str:
+    if not OPENAI_API_KEY:
+        return "🔒 API key not set (add OPENAI_API_KEY in Secrets)."
     try:
-        service = Service()
-        options = webdriver.ChromeOptions()
-        options.add_argument("--use-fake-ui-for-media-stream")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument("--mute-audio")
-
-        driver = webdriver.Chrome(service=service, options=options)
-        driver.get("https://meet.google.com/")
-        time.sleep(5)
-
-        meeting_link = f"https://meet.google.com/{meet_code}"
-        driver.get(meeting_link)
-        time.sleep(10)
-
-        # Run loop
-        while True:
-            subtitles = driver.find_elements(By.CLASS_NAME, "iOzk7")
-            if subtitles:
-                last_subtitle = subtitles[-1].text.strip()
-                if not subtitles_data or subtitles_data[-1] != last_subtitle:
-                    subtitles_data.append(last_subtitle)
-
-                    # AI response
-                    answer = ask_ai(last_subtitle)
-                    responses_data.append(answer)
-
-            time.sleep(2)
-
-    except Exception as e:
-        print("🛑 Error:", e)
-
-
-# ------------------------------
-# 🔹 OpenAI / OpenRouter API Setup
-# ------------------------------
-client = openai.OpenAI(
-    api_key="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",  # Replace with your key
-    base_url="https://openrouter.ai/api/v1"
-)
-
-def ask_ai(question):
-    try:
-        response = client.chat.completions.create(
+        resp = client.chat.completions.create(
             model="google/gemini-2.0-flash-lite-001",
-            messages=[{"role": "user", "content": question}]
+            messages=[{"role":"user","content": question}]
         )
-        if response and hasattr(response, 'choices') and response.choices:
-            return response.choices[0].message.content.strip()
+        if resp and hasattr(resp, "choices") and resp.choices:
+            return resp.choices[0].message.content.strip()
         return "⚠ No valid response from AI"
     except Exception as e:
-        return f"🚨 API Error: {str(e)}"
+        return f"🚨 API Error: {e}"
+
+# ----------------------------
+# Streamlit UI
+# ----------------------------
+st.set_page_config(page_title="Google Meet Assistant", layout="centered")
+st.title("🎙 Google Meet Assistant (Streamlit demo)")
+
+# session state to hold history
+if "subs" not in st.session_state:
+    st.session_state.subs = []
+if "resps" not in st.session_state:
+    st.session_state.resps = []
+
+st.markdown("**Manual mode:** paste or type a subtitle and press *Send to AI* to get a reply (good for demos).")
+
+col1, col2 = st.columns([3,1])
+with col1:
+    subtitle = st.text_area("Subtitle / Question", placeholder="Paste a Meet subtitle line here", height=120)
+with col2:
+    if st.button("Send to AI"):
+        text = subtitle.strip()
+        if not text:
+            st.warning("Type or paste a subtitle first.")
+        else:
+            st.session_state.subs.append(text)
+            with st.spinner("Asking AI..."):
+                ans = ask_ai(text)
+            st.session_state.resps.append(ans)
+            st.success("Done — response added to history.")
+
+st.markdown("---")
+st.markdown("**Quick demo:** generate a sample subtitle (no Meet needed).")
+if st.button("Add sample subtitle (demo)"):
+    demo_text = f"Sample subtitle at {time.strftime('%H:%M:%S')}"
+    st.session_state.subs.append(demo_text)
+    st.session_state.resps.append(ask_ai(demo_text))
+
+st.markdown("### History (most recent first)")
+for s, r in zip(reversed(st.session_state.subs), reversed(st.session_state.resps)):
+    st.markdown(f"**Subtitle:** {s}")
+    st.markdown(f"**AI:** {r}")
+    st.markdown("---")
+
+st.caption("Note: Selenium live capture won’t run on Streamlit Cloud. Use manual input / sample subtitles for online demos.")
 
 
-# ------------------------------
-# 🔹 Flask Routes
-# ------------------------------
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-@app.route("/start", methods=["POST"])
-def start():
-    global meet_code
-    meet_code = request.json.get("meet_code")
-    thread = Thread(target=start_meeting, args=(meet_code,))
-    thread.daemon = True
-    thread.start()
-    return jsonify({"status": "Meeting bot started!"})
-
-@app.route("/data")
-def data():
-    return jsonify({
-        "subtitles": subtitles_data,
-        "responses": responses_data
-    })
-
-
-# ------------------------------
-# 🔹 Run Flask App
-# ------------------------------
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
 
 
 

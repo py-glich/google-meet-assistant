@@ -23,7 +23,7 @@ status_bar = st.empty()
 # OpenAI Setup (OpenRouter)
 # -------------------------------
 client = openai.OpenAI(
-    api_key="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",  # 🔑 Your key
+    api_key="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",  # 🔑 your key
     base_url="https://openrouter.ai/api/v1"
 )
 
@@ -40,36 +40,33 @@ def ask_ai(question):
         return f"🚨 API Error: {str(e)}"
 
 # -------------------------------
-# Selenium Setup
+# Meeting Bot
 # -------------------------------
 def start_meeting(meet_code):
     try:
-        service = Service()  # requires chromedriver installed
+        service = Service()  # make sure chromedriver is installed
         options = webdriver.ChromeOptions()
-        options.add_argument("--use-fake-ui-for-media-stream")  # auto allow mic/cam
+        options.add_argument("--use-fake-ui-for-media-stream")  # allow mic/cam automatically
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--mute-audio")
 
         driver = webdriver.Chrome(service=service, options=options)
 
-        # Open Google Meet login
-        driver.get("https://meet.google.com/")
-        status_bar.info("Please log in manually in the browser window...")
-        time.sleep(10)  # give time for login
-
-        # Join meeting
+        # Open Google Meet directly
         meeting_link = f"https://meet.google.com/{meet_code}"
         driver.get(meeting_link)
-        time.sleep(15)  # wait for meeting to load
-        status_bar.success("✅ Google Meet opened and joined!")
 
-        # Loop: grab subtitles + send to AI
+        status_bar.info("🌐 Opening Google Meet... Please log in and press 'Join now' manually if required.")
+        time.sleep(15)  # wait for login & meeting to load
+
+        status_bar.success("✅ Google Meet opened!")
+
         last_seen = ""
         while True:
             subtitles = driver.find_elements(By.CLASS_NAME, "iOzk7")
             if subtitles:
                 latest = subtitles[-1].text.strip()
-                if latest != last_seen:  # only process new lines
+                if latest != last_seen:
                     last_seen = latest
                     subtitles_box.write(f"**📝 Subtitles:**\n{latest}")
 
@@ -83,10 +80,12 @@ def start_meeting(meet_code):
         status_bar.error(f"🛑 Error: {e}")
 
 # -------------------------------
-# Start Button
+# Button: Join Meeting
 # -------------------------------
-if st.button("🚀 Start Assistant") and meet_code:
+if st.button("🚀 Join Meeting") and meet_code:
     Thread(target=start_meeting, args=(meet_code,), daemon=True).start()
+
+
 
 
 

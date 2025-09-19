@@ -14,7 +14,7 @@ except Exception as e:
 # ----------------------------
 # OpenAI / OpenRouter setup
 # ----------------------------
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("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")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
 
 if not OPENAI_API_KEY:
@@ -80,6 +80,7 @@ for s, r in zip(reversed(st.session_state.subs), reversed(st.session_state.resps
     st.markdown("---")
 
 st.caption("Note: Selenium live capture won’t run on Streamlit Cloud. Use manual input / sample subtitles for online demos.")
+
 
 
 
